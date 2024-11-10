@@ -15,6 +15,8 @@ const table = document.getElementById("table-body");
 var preloaded = [];
 var guessed = [];
 
+teamData = {};
+
 window.onload = function () {
   fetch(`${TBA_BASE_URL}/status`, TBA_OPTS)
     .then((rsp) => rsp.json())
@@ -53,10 +55,9 @@ async function fetchTeamData(number) {
   }
 
   // Fetch team info
-  simple = await fetch(
-    `${TBA_BASE_URL}/team/frc${number}`,
-    TBA_OPTS
-  ).then((rsp) => (rsp.ok ? rsp.json() : null));
+  simple = await fetch(`${TBA_BASE_URL}/team/frc${number}`, TBA_OPTS).then(
+    (rsp) => (rsp.ok ? rsp.json() : null)
+  );
 
   // Fetch awards info
   awards = await fetch(
@@ -95,4 +96,25 @@ function buildTableRow(data) {
   }
 
   return tr;
+}
+
+async function fetchRanks() {
+  teams = await Promise.all([
+    fetch(`${SB_BASE_URL}/teams?active=true&offset=0`),
+    fetch(`${SB_BASE_URL}/teams?active=true&offset=1000`),
+    fetch(`${SB_BASE_URL}/teams?active=true&offset=2000`),
+    fetch(`${SB_BASE_URL}/teams?active=true&offset=3000`),
+  ]);
+
+  console.log(teams);
+
+  teamMap = new Map();
+
+  teams.forEach((rsp) =>
+    console.log(rsp.json().then((json) => json.values().forEach((team) => teamMap.set(team.team, team))))
+    // rsp.json.values().forEach((team) => teamStats.push({ team }))
+  );
+
+
+  return teamMap;
 }
