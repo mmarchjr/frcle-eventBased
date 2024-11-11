@@ -15,13 +15,46 @@ const table = document.getElementById("table-body");
 var preloaded = [];
 var guessed = [];
 
-teamData = {};
+SBData = {};
 
 window.onload = function () {
   fetch(`${TBA_BASE_URL}/status`, TBA_OPTS)
     .then((rsp) => rsp.json())
     .then((json) => tbaStatus(json));
+
+  // Atomic data, it is more than a day old, we request for new data
+  if (localStorage.getItem("sb_timestamp") != null) {
+    if (Date.now() - localStorage.getItem("sb_timestamp") > 8.64e7) {
+        console.log("Teams oudated, fetching");
+      localStorage.setItem("sb_timestamp", Date.now());
+      fetchSBData().then((map) => {
+        SBData = map;
+      });
+    } else {
+        console.log("Teams in localStorage, reading...")
+      SBData = new Map();
+      teams = JSON.parse(localStorage.getItem("sb_teams"));
+
+      teams.forEach((entry) => SBData.set(entry[0], entry[1]));
+      console.log("Teams have been read!")
+    }
+  } else {
+    console.log("Fetching teams...");
+    localStorage.setItem("sb_timestamp", Date.now());
+    fetchSBData().then((map) => {
+      SBData = map;
+    });
+  }
 };
+
+window.addEventListener("beforeunload", (event) => {
+    event.preventDefault();
+  if (SBData) {
+    localStorage.setItem("sb_teams", JSON.stringify([...SBData]));
+  } else {
+    cleanCache();
+  }
+});
 
 function tbaStatus(json) {
   tba = json;
@@ -31,7 +64,7 @@ function tbaStatus(json) {
   }
 }
 
-function readTeamData(preload, number) {
+function readSBData(preload, number) {
   if (guessed.indexOf(number) != -1) {
     // has been guessed
   } else {
@@ -84,6 +117,15 @@ async function fetchTeamData(number) {
   }
 }
 
+function guess(number) {
+  if (SBData) {
+    teamData = SBData.get(number);
+    table.appendChild(buildTableRow([teamData.team]));
+  } else {
+    alert("Currently fetching data, try again momentarily!");
+  }
+}
+
 function buildTableRow(data) {
   var tr = document.createElement("tr");
   console.log(data);
@@ -91,14 +133,13 @@ function buildTableRow(data) {
   for (i = 0; i < data.length; ++i) {
     td = document.createElement("td");
     td.innerHTML = data[i];
-    console.log(data[i]);
     tr.appendChild(td);
   }
 
   return tr;
 }
 
-async function fetchRanks() {
+async function fetchSBData() {
   teams = await Promise.all([
     fetch(`${SB_BASE_URL}/teams?active=true&offset=0`),
     fetch(`${SB_BASE_URL}/teams?active=true&offset=1000`),
@@ -106,15 +147,24 @@ async function fetchRanks() {
     fetch(`${SB_BASE_URL}/teams?active=true&offset=3000`),
   ]);
 
-  console.log(teams);
+  console.log("Teams have been fetched!");
 
   teamMap = new Map();
 
-  teams.forEach((rsp) =>
-    console.log(rsp.json().then((json) => json.values().forEach((team) => teamMap.set(team.team, team))))
-    // rsp.json.values().forEach((team) => teamStats.push({ team }))
-  );
-
+  teams.forEach(
+    (rsp) =>
+      
+        rsp
+          .json()
+          .then((json) =>
+            json.values().forEach((team) => teamMap.set(team.team, team))
+          )
+      );
 
   return teamMap;
+}
+
+function cleanCache() {
+  localStorage.removeItem("sb_teams");
+  localStorage.removeItem("sb_timestamp");
 }
