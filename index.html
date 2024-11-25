@@ -5,24 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FRCle</title>
     <script defer src="script.js"></script>
+    <script src="https://kit.fontawesome.com/152cf5282d.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   </head>
   <body>
     <main>
-      <div id="gusser">
-        <input type="text" />
+      <div id="guess">
+        <input id="guesser" type="text" autocomplete="on" placeholder="Team Number..." list="teams"/>
+        <datalist id="teams"></datalist>
+        <button onclick="guess(document.getElementById('guesser').value)">Guess</button>
       </div>
       <div id="container">
         <table id="display-table">
           <tr class="headers">
             <th>Team Number</th>
+            <th>Team Nickname</th>
             <th>Country</th>
             <th>Blue Banners</th>
-            <th>World Rank</th>
+            <th>Norm EPA</th>
             <th>Rookie Season</th>
           </tr>
-          <tbody id="table-body">
-          </tbody>
+          <tbody id="table-body"></tbody>
         </table>
       </div>
     </main>
