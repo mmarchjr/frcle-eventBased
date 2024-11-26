@@ -33,9 +33,8 @@ window.onload = async function () {
         SBData = map;
         var teams = map.keys().toArray();
         hiddenTeam = pickTeam(teams);
-        teams.forEach((entry) => SBData.set(entry[0], entry[1]));
+        fetchBanners(hiddenTeam).then((b) => (banners = b));
         populateTeams(SBData);
-        fetchBanners(hiddenTeam).then((b) => banners = b);
       });
     } else {
       console.log("Teams in localStorage, reading...");
@@ -45,7 +44,7 @@ window.onload = async function () {
       teams = SBData.keys().toArray();
       hiddenTeam = pickTeam(teams);
       populateTeams(SBData);
-      fetchBanners(hiddenTeam).then((b) => banners = b);
+      fetchBanners(hiddenTeam).then((b) => (banners = b));
       console.log("Teams have been read!");
     }
   } else {
@@ -55,7 +54,7 @@ window.onload = async function () {
       SBData = map;
       var teams = map.keys().toArray();
       hiddenTeam = pickTeam(teams);
-      fetchBanners(hiddenTeam).then((b) => banners = b);
+      fetchBanners(hiddenTeam).then((b) => (banners = b));
       populateTeams(SBData);
     });
   }
@@ -72,7 +71,7 @@ window.addEventListener("beforeunload", (event) => {
 
 function populateTeams(SBData) {
   var teams = Array.from(SBData.keys()).sort();
-  hiddenTeam = pickTeam(teams);
+  pickTeam(teams);
   teams.forEach((team) => {
     let element = document.createElement("option");
     element.value = team;
@@ -96,6 +95,9 @@ function pickTeam(teams) {
 function guess(number) {
   if (SBData) {
     if (SBData.get(number) && guessed.indexOf(number) == -1) {
+      if (number == hiddenTeam) {
+        setTimeout(celebrate, 500);
+      }
       guesses += 1;
       guessed.push(number);
       teamData = SBData.get(number);
@@ -145,7 +147,6 @@ async function fetchBanners(number) {
     TBA_OPTS
   ).then((rsp) => (rsp.ok ? rsp.json() : null));
 
-  console.log(awards.filter((award) => award.award_number == 1).length);
   return awards.filter((award) => award.award_type == 1).length;
 }
 
@@ -228,4 +229,44 @@ async function fetchSBData() {
 function cleanCache() {
   localStorage.removeItem("sb_teams");
   localStorage.removeItem("sb_timestamp");
+}
+
+function randomInRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function celebrate() {
+  const duration = 7 * 1000,
+    animationEnd = Date.now() + duration,
+    defaults = {
+      startVelocity: 30,
+      spread: 360,
+      ticks: 60,
+      zIndex: 0,
+      colors: ["#0066b3", "#ed1c24", SBData.get(hiddenTeam).colors.primary],
+    };
+
+  setInterval(function () {
+    const timeLeft = animationEnd - Date.now();
+
+    if (timeLeft <= 0) {
+      return clearInterval(interval);
+    }
+
+    const particleCount = 50 * (timeLeft / duration);
+
+    // since particles fall down, start a bit higher than random
+    confetti(
+      Object.assign({}, defaults, {
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      })
+    );
+    confetti(
+      Object.assign({}, defaults, {
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      })
+    );
+  }, 250);
 }
