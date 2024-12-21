@@ -1,9 +1,3 @@
-// Extract team number from the URL
-function getTeamFromURL() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("team");
-}
-
 const TBA_OPTS = {
   headers: {
     "X-TBA-Auth-Key": "fR7qLuvjYf4CcOQRmcd0veCMGUFQClJXW6kbTreFtbqgEPSJwdTSbhnXB3s61QBj",
@@ -12,27 +6,45 @@ const TBA_OPTS = {
 
 const TBA_BASE_URL = "https://www.thebluealliance.com/api/v3";
 const SB_BASE_URL = "https://api.statbotics.io/v3";
-let SBData = {};
 
+var tba;
+SBData = {};
 const table = document.getElementById("table-body");
 const input = document.getElementById("guesser");
 
-let guessed = [];
-let guesses = 0;
-let hiddenTeam;
-let banners = 0;
-let teamNumber = getTeamFromURL();
-let attendedTeams = new Set();
+var guessed = [];
+var guesses = 0;
+var hiddenTeam;
+var banners = 0;
 
 window.onload = async function () {
+  // Extract the team number from the URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const teamNumber = 'frc' + urlParams.get('team');  // Prefix 'frc' to the team number
+
+  // Fetch the events the specified team attended during the 2024 season
+  fetch(`${TBA_BASE_URL}/team/${teamNumber}/events/2024`, TBA_OPTS)
+    .then((rsp) => rsp.json())
+    .then((events) => {
+      if (events.length === 0) {
+        alert("No events found for this team in the 2024 season.");
+        return;
+      }
+      // Populate table with team information for each event attended
+      populateTeamEvents(events);
+    })
+    .catch((error) => {
+      console.error('Error fetching team events:', error);
+    });
+
+  // Fetch Statbotics data and local storage management
   fetch(`${TBA_BASE_URL}/status`, TBA_OPTS)
     .then((rsp) => rsp.json())
     .then((json) => tbaStatus(json));
 
-  // Atomic data, it is more than a day old, we request for new data
   if (localStorage.getItem("sb_timestamp") != null) {
     if (Date.now() - localStorage.getItem("sb_timestamp") > 8.64e7) {
-      console.log("Teams oudated, fetching");
+      console.log("Teams outdated, fetching");
       localStorage.setItem("sb_timestamp", Date.now());
       fetchSBData().then((map) => {
         SBData = map;
@@ -63,32 +75,32 @@ window.onload = async function () {
       populateTeams(SBData);
     });
   }
-
-  if (!teamNumber) {
-    console.log("No team number specified in the URL. Running default behavior.");
-  } else {
-    console.log(`Fetching events for team ${teamNumber} in 2024...`);
-
-    // Fetch events the team attended in 2024
-    fetch(`${TBA_BASE_URL}/team/frc${teamNumber}/events/2024`, TBA_OPTS)
-      .then((rsp) => (rsp.ok ? rsp.json() : Promise.reject("Failed to fetch events")))
-      .then((events) => {
-        const eventKeys = events.map((event) => event.key);
-        console.log(`Team ${teamNumber} attended events:`, eventKeys);
-        return fetchTeamsAtEvents(eventKeys);
-      })
-      .then((teams) => {
-        attendedTeams = teams;
-        console.log("Teams at the events attended by team", teamNumber, teams);
-        hiddenTeam = pickTeam(Array.from(attendedTeams));
-        populateTeams(attendedTeams);
-      })
-      .catch((error) => console.error(error));
-  }
 };
 
+function populateTeamEvents(events) {
+  events.forEach((event) => {
+    fetchSBData(event.key).then((teamData) => {
+      const team = teamData.get(event.team_key);
+      if (team) {
+        fetchBanners(event.team_key).then((b) => {
+          table.insertBefore(
+            buildTableRow([
+              team.team,
+              team.name,
+              team.country,
+              b, // Number of banners
+              team.norm_epa.current,
+              team.rookie_year,
+            ]),
+            table.firstChild
+          );
+        });
+      }
+    });
+  });
+}
+
 window.addEventListener("beforeunload", (event) => {
-  //   event.preventDefault();
   if (SBData) {
     localStorage.setItem("sb_teams", JSON.stringify([...SBData]));
   } else {
@@ -97,64 +109,58 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 function populateTeams(SBData) {
-  if (attendedTeams.size > 0) {
-    const sortedTeams = Array.from(attendedTeams).sort();
-    sortedTeams.forEach((team) => {
-      let element = document.createElement("option");
-      element.value = team;
-      document.getElementById("teams").appendChild(element);
-    });
-    console.log("Teams have been populated based on events attended!");
-  } else {
-    const teams = Array.from(SBData.keys()).sort();
-    teams.forEach((team) => {
-      let element = document.createElement("option");
-      element.value = team;
-      document.getElementById("teams").appendChild(element);
-    });
-    console.log("Teams have been populated with all teams!");
-  }
+  var teams = Array.from(SBData.keys()).sort();
+  pickTeam(teams);
+  teams.forEach((team) => {
+    let element = document.createElement("option");
+    element.value = team;
+    document.getElementById("teams").appendChild(element);
+  });
+  console.log("Teams have been populated!");
 }
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && input.value !== "") {
-    guess(input.value);
-    input.value = "";
+  if (event.key === "Enter" && guesser.value != "") {
+    guess(guesser.value);
+    guesser.value = "";
   }
 });
 
 function pickTeam(teams) {
-  const idx = Math.floor(Math.random() * teams.length);
-  return teams[idx];
+  idx = Math.random() * teams.length;
+  return teams.at(idx);
 }
 
 function guess(number) {
   if (SBData) {
-    if (
-      (attendedTeams.size === 0 || attendedTeams.has(number)) &&
-      guessed.indexOf(number) === -1
-    ) {
+    if (SBData.get(number) && guessed.indexOf(number) == -1) {
       if (number == hiddenTeam) {
         setTimeout(celebrate, 500);
       }
       guesses += 1;
       guessed.push(number);
+      teamData = SBData.get(number);
       fetchBanners(number).then((banners) =>
         table.insertBefore(
-          buildTableRow([number, banners]),
+          buildTableRow([
+            teamData.team,
+            teamData.name,
+            teamData.country,
+            banners,
+            teamData.norm_epa.current,
+            teamData.rookie_year,
+          ]),
           table.firstChild
         )
       );
 
-      input.value = "";
+      guesser.value = "";
     } else {
-      if (guessed.indexOf(number) !== -1) {
+      if (guessed.indexOf(number) != -1) {
         alert(`Team ${number} has already been guessed!`);
       } else {
         alert(
-          attendedTeams.size > 0
-            ? `Team ${number} did not attend the same events as team ${teamNumber}.`
-            : `Team ${number} does not exist, or did not compete in the ${tba.current_season} season`
+          `Team ${number} does not exist, or did not compete in the ${tba.current_season} season`
         );
       }
     }
@@ -171,33 +177,68 @@ function tbaStatus(json) {
   }
 }
 
-async function fetchBanners(number) {
+async function fetchBanners(teamNumber) {
   let awards = null;
 
-  awards = await fetch(`${TBA_BASE_URL}/team/frc${number}/awards`, TBA_OPTS)
-    .then((rsp) => (rsp.ok ? rsp.json() : null))
-    .catch((err) => {
-      console.error(`Error fetching awards for team ${number}:`, err);
-      return [];
-    });
+  // Fetch awards info for the team
+  awards = await fetch(
+    `${TBA_BASE_URL}/team/${teamNumber}/awards`,
+    TBA_OPTS
+  ).then((rsp) => (rsp.ok ? rsp.json() : null));
 
   return awards.filter((award) => award.award_type == 1).length;
 }
 
 function buildTableRow(data) {
-  const tr = document.createElement("tr");
+  var tr = document.createElement("tr");
 
-  data.forEach((value) => {
-    const td = document.createElement("td");
-    td.textContent = value;
+  sb_array = SBData.get(hiddenTeam);
+  sb_data = [
+    sb_array.team,
+    null,
+    sb_array.country,
+    banners,
+    sb_array.norm_epa.current,
+    sb_array.rookie_year,
+  ];
+
+  for (i = 0; i < data.length; ++i) {
+    td = document.createElement("td");
+    icon = document.createElement("i");
+    td.innerHTML = data[i];
+
+    if ([0, 2, 3, 4, 5].indexOf(i) != -1) {
+      if (i == 2) {
+        if (data[i] != sb_data[i]) {
+          td.classList.add("lower");
+          icon.classList = "fa-solid fa-x";
+        } else {
+          td.classList.add("correct");
+          icon.classList = "fa-solid fa-check";
+        }
+      } else {
+        if (parseInt(data[i]) > parseInt(sb_data[i])) {
+          td.classList.add("lower");
+          icon.classList = "far fa-arrow-alt-circle-down";
+        } else if (parseInt(data[i]) < parseInt(sb_data[i])) {
+          td.classList.add("higher");
+          icon.classList = "far fa-arrow-alt-circle-up";
+        } else {
+          td.classList.add("correct");
+          icon.classList = "fa-solid fa-check";
+        }
+      }
+    }
+
+    td.appendChild(icon);
     tr.appendChild(td);
-  });
+  }
 
   return tr;
 }
 
-async function fetchSBData() {
-  teams = await Promise.all([
+async function fetchSBData(eventKey) {
+  const teams = await Promise.all([
     fetch(`${SB_BASE_URL}/teams?active=true&offset=0`),
     fetch(`${SB_BASE_URL}/teams?active=true&offset=1000`),
     fetch(`${SB_BASE_URL}/teams?active=true&offset=2000`),
@@ -206,7 +247,7 @@ async function fetchSBData() {
 
   console.log("Teams have been fetched!");
 
-  teamMap = new Map();
+  const teamMap = new Map();
 
   for (const rsp of teams) {
     if (rsp.ok) {
@@ -219,26 +260,7 @@ async function fetchSBData() {
     }
   }
 
-  console.log(teamMap);
-
   return teamMap;
-}
-
-async function fetchTeamsAtEvents(eventKeys) {
-  const teamSet = new Set();
-
-  for (const eventKey of eventKeys) {
-    const teams = await fetch(`${TBA_BASE_URL}/event/${eventKey}/teams`, TBA_OPTS)
-      .then((rsp) => (rsp.ok ? rsp.json() : []))
-      .catch((err) => {
-        console.error(`Error fetching teams for event ${eventKey}:`, err);
-        return [];
-      });
-
-    teams.forEach((team) => teamSet.add(team.team_number.toString()));
-  }
-
-  return teamSet;
 }
 
 function cleanCache() {
@@ -257,3 +279,30 @@ function celebrate() {
       startVelocity: 30,
       spread: 360,
       ticks: 60,
+      zIndex: 0,
+      colors: ["#0066b3", "#ed1c24", SBData.get(hiddenTeam).colors.primary],
+    };
+
+  setInterval(function () {
+    const timeLeft = animationEnd - Date.now();
+
+    if (timeLeft <= 0) {
+      return clearInterval(interval);
+    }
+
+    const particleCount = 50 * (timeLeft / duration);
+
+    confetti(
+      Object.assign({}, defaults, {
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      })
+    );
+    confetti(
+      Object.assign({}, defaults, {
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      })
+    );
+  }, 250);
+}
