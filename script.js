@@ -30,18 +30,39 @@ window.onload = async function () {
         alert("No events found for this team in the 2024 season.");
         return;
       }
-      // Populate table with team information for each event attended
-      populateTeamEvents(events);
+
+      // For each event the team attended, fetch their data and populate the table
+      events.forEach((event) => {
+        fetchSBData(event.key).then((teamData) => {
+          const team = teamData.get(event.team_key);
+          if (team) {
+            fetchBanners(event.team_key).then((b) => {
+              table.insertBefore(
+                buildTableRow([
+                  team.team,
+                  team.name,
+                  team.country,
+                  b, // Number of banners
+                  team.norm_epa.current,
+                  team.rookie_year,
+                ]),
+                table.firstChild
+              );
+            });
+          }
+        });
+      });
     })
     .catch((error) => {
       console.error('Error fetching team events:', error);
     });
 
-  // Fetch Statbotics data and local storage management
+  // Fetch TBA status (just in case we need it later)
   fetch(`${TBA_BASE_URL}/status`, TBA_OPTS)
     .then((rsp) => rsp.json())
     .then((json) => tbaStatus(json));
 
+  // Handle the local storage of teams data
   if (localStorage.getItem("sb_timestamp") != null) {
     if (Date.now() - localStorage.getItem("sb_timestamp") > 8.64e7) {
       console.log("Teams outdated, fetching");
@@ -77,29 +98,6 @@ window.onload = async function () {
   }
 };
 
-function populateTeamEvents(events) {
-  events.forEach((event) => {
-    fetchSBData(event.key).then((teamData) => {
-      const team = teamData.get(event.team_key);
-      if (team) {
-        fetchBanners(event.team_key).then((b) => {
-          table.insertBefore(
-            buildTableRow([
-              team.team,
-              team.name,
-              team.country,
-              b, // Number of banners
-              team.norm_epa.current,
-              team.rookie_year,
-            ]),
-            table.firstChild
-          );
-        });
-      }
-    });
-  });
-}
-
 window.addEventListener("beforeunload", (event) => {
   if (SBData) {
     localStorage.setItem("sb_teams", JSON.stringify([...SBData]));
@@ -110,7 +108,6 @@ window.addEventListener("beforeunload", (event) => {
 
 function populateTeams(SBData) {
   var teams = Array.from(SBData.keys()).sort();
-  pickTeam(teams);
   teams.forEach((team) => {
     let element = document.createElement("option");
     element.value = team;
@@ -280,29 +277,19 @@ function celebrate() {
       spread: 360,
       ticks: 60,
       zIndex: 0,
-      colors: ["#0066b3", "#ed1c24", SBData.get(hiddenTeam).colors.primary],
+      colors: ["#ffb400", "#ffec6a", "#fda327"],
+      disableForReducedMotion: true,
     };
 
-  setInterval(function () {
-    const timeLeft = animationEnd - Date.now();
+  function random(min, max) {
+    return Math.random() * (max - min) + min;
+  }
 
-    if (timeLeft <= 0) {
-      return clearInterval(interval);
-    }
-
-    const particleCount = 50 * (timeLeft / duration);
-
-    confetti(
-      Object.assign({}, defaults, {
-        particleCount,
-        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
-      })
-    );
-    confetti(
-      Object.assign({}, defaults, {
-        particleCount,
-        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
-      })
-    );
-  }, 250);
+  var animation = Object.assign({}, defaults, {
+    startVelocity: random(40, 70),
+    spread: random(120, 180),
+    ticks: random(40, 100),
+    zIndex: 0,
+    colors: ["#ffb400", "#ffec6a", "#fda327"],
+  });
 }
